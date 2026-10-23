@@ -164,7 +164,7 @@ h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;letter-spacing:
 .kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;display:flex;flex-direction:column;gap:4px;min-width:0}
 .kpi .money{font-size:21px}
 .kpi .sub{font-size:12px;color:var(--muted);font-weight:600}
-.up{color:var(--bad)} .down{color:var(--ok)}
+.up{color:var(--bad)} .down{color:var(--ok)} .neg{color:var(--ok)}
 .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:12px}
 .panel h3{font-size:16px}
 .panel .hint{font-size:12px;color:var(--muted)}
@@ -519,7 +519,7 @@ function viewLanc(){
   const fl=q?ls.filter(l=>l.desc.toLowerCase().includes(q)):ls;
   if(!fl.length)h+=`<div class="empty"><span>${q?'Nada encontrado.':'Nenhum lançamento neste mês.'}</span><button class="btn primary" data-act="nova-compra">Lançar compra</button></div>`;
   else{
-    h+=`<div class="list">${fl.slice(0,UI.limite).map(l=>{const p=parcelaInfo(l,ym);return `<button class="lrow" data-lanc="${l.id}"><div class="txt"><div class="name">${esc(l.desc)}</div><div class="meta">${p?(p.k>=p.n?'Última parcela':'Faltam '+(p.n-p.k)+' parcelas'):'À vista'}</div></div>${p?`<span class="parc${p.k>=p.n?' last':''}">${p.k}/${p.n}</span>`:''}<span class="money">${fmt(l.valores[ym])}</span></button>`}).join('')}
+    h+=`<div class="list">${fl.slice(0,UI.limite).map(l=>{const p=parcelaInfo(l,ym);const neg=l.valores[ym]<0;return `<button class="lrow" data-lanc="${l.id}" aria-label="Editar ${esc(l.desc)}"><div class="txt"><div class="name">${esc(l.desc)}</div><div class="meta">${neg?'Estorno · ':''}${p?(p.k>=p.n?'Última parcela':'Faltam '+(p.n-p.k)+' parcelas'):'À vista'}</div></div>${p?`<span class="parc${p.k>=p.n?' last':''}">${p.k}/${p.n}</span>`:''}<span class="money${neg?' neg':''}">${fmt(l.valores[ym])}</span></button>`}).join('')}
     ${fl.length>UI.limite?`<button class="more" data-act="mais">Mostrar mais ${fl.length-UI.limite}</button>`:''}</div>`;
   }
   return h+'</div>';
@@ -579,7 +579,7 @@ function viewPainel(){
   // compromisso futuro
   const fut=[];for(let k=1;k<=6;k++){const m=ymAdd(ym,k);let v=0;S.lancamentos.forEach(l=>{if(l.valores[m])v+=l.valores[m]});fut.push([m,v])}
   const fm=Math.max(1,...fut.map(f=>f[1]));
-  if(fut.some(f=>f[1]>0)){h+=`<div class="section"><div class="panel"><h3>Parcelas já comprometidas</h3><span class="hint">Soma dos lançamentos nos cartões para os próximos 6 meses</span>${fut.map(([m,v])=>`<div class="hbar"><span class="n" style="text-transform:capitalize">${ymLabel(m)}</span><span class="v">${fmt(v)}</span><span class="t"><i style="width:${v/fm*100}%;background:var(--c2)"></i></span></div>`).join('')}</div></div>`}
+  if(fut.some(f=>f[1]>0)){h+=`<div class="section"><div class="panel"><h3>Parcelas já comprometidas</h3><span class="hint">Soma dos lançamentos nos cartões para os próximos 6 meses</span>${fut.map(([m,v])=>`<div class="hbar"><span class="n" style="text-transform:capitalize">${ymLabel(m)}</span><span class="v">${fmt(v)}</span><span class="t"><i style="width:${Math.max(0,v/fm*100)}%;background:var(--c2)"></i></span></div>`).join('')}</div></div>`}
   return h;
 }
 function niceStep(mx){const raw=mx/4;const p=Math.pow(10,Math.floor(Math.log10(raw)));const n=raw/p;return(n<=1?1:n<=2?2:n<=2.5?2.5:n<=5?5:10)*p}
@@ -769,12 +769,11 @@ function sheetConta(id){
 function sheetLanc(id){
   const l=S.lancamentos.find(x=>x.id===id);if(!l)return;const k=cartao(l.cartao);
   const ms=Object.keys(l.valores).sort();const tot=ms.reduce((s,m)=>s+l.valores[m],0);
-  openSheet(`<h2>${esc(l.desc)}</h2><p class="sub">${esc(k?k.nome:'')} · ${ms.length} ${ms.length>1?'parcelas':'parcela'} · total ${fmt(tot)}</p>
+  openSheet(`<h2>Editar lançamento</h2><p class="sub">${esc(k?k.nome:'')} · ${ms.length} ${ms.length>1?'parcelas':'parcela'} · total ${fmt(tot)}</p>
   <div class="plist" style="margin-bottom:14px">${ms.map(m=>{const p=parcelaInfo(l,m);return `<div class="${m===UI.mes?'cur':''}"><span style="text-transform:capitalize">${p?p.k+'/'+p.n+' · ':''}${ymLabel(m)}</span><b>${fmt(l.valores[m])}</b></div>`}).join('')}</div>
-  <form class="form" id="fL"><div class="field"><label for="lDesc">Descrição</label><input id="lDesc" value="${esc(l.desc)}"></div>
-  <button class="btn primary block" type="submit">Salvar descrição</button>
-  <button class="btn danger block" type="button" id="lDel">Excluir lançamento</button></form>`,sh=>{
-    sh.querySelector('#fL').onsubmit=ev=>{ev.preventDefault();const d=sh.querySelector('#lDesc').value.trim();if(d){l.desc=d;save();closeSheet();render()}};
+  <div id="lEditBody">${formCompra(today0.toISOString().slice(0,10),l)}</div>
+  <button class="btn danger block" type="button" id="lDel" style="margin-top:12px">Excluir lançamento</button>`,sh=>{
+    mountCompra(sh.querySelector('#lEditBody'),l);
     sh.querySelector('#lDel').onclick=()=>confirmSheet('Excluir lançamento?',`${l.desc} sai de todas as ${ms.length} faturas${contaDoCartao(l.cartao)?' e o valor é descontado da conta do cartão':''}.`,'Excluir',()=>{syncLanc(l,-1);S.lancamentos=S.lancamentos.filter(x=>x!==l);save();render();toast('Lançamento excluído')},true);
   });
 }
@@ -793,41 +792,77 @@ function sheetNovo(tipo){
     draw(tipo);
   });
 }
-function formCompra(hoje){
+const descBase=s=>String(s||'').replace(/\s-\s(\d+X|\d{2}\/\d{2})$/,'');
+/* formCompra(hoje) = novo lançamento · formCompra(hoje,l) = edição de um lançamento existente */
+function formCompra(hoje,l){
   if(!S.cartoes.length)return `<div class="empty"><span>Cadastre um cartão primeiro.</span><button class="btn primary" type="button" id="goCartao">Cadastrar cartão</button></div>`;
-  const sel=cartao(UI.cartao)?UI.cartao:S.cartoes[0].id;
+  let sel=cartao(UI.cartao)?UI.cartao:S.cartoes[0].id,desc='',valor='',nParc=1,data=hoje,mes=UI.mes,neg=false;
+  if(l){
+    const ms=Object.keys(l.valores).sort(),tot=r2(ms.reduce((s,m)=>s+l.valores[m],0));
+    sel=cartao(l.cartao)?l.cartao:sel;desc=descBase(l.desc);nParc=ms.length||1;neg=tot<0;valor=numStr(Math.abs(tot));data=l.data||'';mes=ms[0]||UI.mes;
+  }
+  const nOpts=Math.max(24,nParc);
   return `<form class="form" id="fCompra">
     <div class="field"><label for="nCartao">Cartão</label><select id="nCartao">${S.cartoes.map(c=>`<option value="${c.id}" ${c.id===sel?'selected':''}>${esc(c.nome)}</option>`).join('')}</select></div>
-    <div class="field"><label for="nDesc">Descrição</label><input id="nDesc" placeholder="Ex.: Mercado, Tênis" autocomplete="off" required></div>
-    <div class="two"><div class="field"><label for="nValor">Valor (R$)</label><input id="nValor" inputmode="decimal" placeholder="0,00" required></div>
-    <div class="field"><label for="nParc">Parcelas</label><select id="nParc">${Array.from({length:24},(_,i)=>`<option value="${i+1}">${i+1}x</option>`).join('')}</select></div></div>
+    <div class="field"><label for="nDesc">Descrição</label><input id="nDesc" placeholder="Ex.: Mercado, Tênis" autocomplete="off" value="${esc(desc)}" required></div>
+    <div class="toggle" role="group" aria-label="Tipo do lançamento"><button type="button" data-sg="1" aria-pressed="${!neg}">Compra</button><button type="button" data-sg="-1" aria-pressed="${neg}">Estorno / crédito</button></div>
+    <div class="two"><div class="field"><label for="nValor">Valor (R$)</label><input id="nValor" inputmode="decimal" placeholder="0,00" value="${esc(valor)}" required></div>
+    <div class="field"><label for="nParc">Parcelas</label><select id="nParc">${Array.from({length:nOpts},(_,i)=>`<option value="${i+1}" ${i+1===nParc?'selected':''}>${i+1}x</option>`).join('')}</select></div></div>
     <div class="toggle" role="group" aria-label="O valor informado é"><button type="button" data-vt="total" aria-pressed="true">Valor total</button><button type="button" data-vt="parcela" aria-pressed="false">Valor da parcela</button></div>
-    <div class="two"><div class="field"><label for="nData">Data da compra</label><input id="nData" type="date" value="${hoje}"></div>
-    <div class="field"><label for="nMes">1ª fatura</label><input id="nMes" type="month" value="${UI.mes}"></div></div>
+    <div class="two"><div class="field"><label for="nData">Data da compra</label><input id="nData" type="date" value="${esc(data)}"></div>
+    <div class="field"><label for="nMes">1ª fatura</label><input id="nMes" type="month" value="${esc(mes)}"></div></div>
     <div class="preview" id="nPrev">Preencha o valor para ver as parcelas.</div><div class="err" id="nErr"></div>
-    <button class="btn primary block" type="submit">Lançar compra</button></form>`;
+    <button class="btn primary block" type="submit">${l?'Salvar alterações':'Lançar compra'}</button></form>`;
 }
-function mountCompra(b){
+function mountCompra(b,l){
   const gc=b.querySelector('#goCartao');if(gc){gc.onclick=()=>sheetCartao(null);return}
-  let vt='total';
-  const calc=()=>{const v=parseBR(b.querySelector('#nValor').value),n=+b.querySelector('#nParc').value,m=b.querySelector('#nMes').value||UI.mes;
-    if(isNaN(v)||v<=0){b.querySelector('#nPrev').textContent='Preencha o valor para ver as parcelas.';return null}
-    const parc=vt==='total'?r2(v/n):r2(v);const total=vt==='total'?r2(v):r2(v*n);
-    b.querySelector('#nPrev').textContent=n>1?`${n}x de ${fmt(parc)} · ${ymLabel(m,'short')} a ${ymLabel(ymAdd(m,n-1),'short')} · total ${fmt(total)}`:`À vista ${fmt(parc)} na fatura de ${ymLabel(m)}`;
+  let vt='total',sg=1;
+  const fValor=b.querySelector('#nValor');
+  const setSg=x=>{sg=x;b.querySelectorAll('[data-sg]').forEach(y=>y.setAttribute('aria-pressed',+y.dataset.sg===x))};
+  const ms0=l?Object.keys(l.valores).sort():[];
+  const tot0=l?r2(ms0.reduce((s,m)=>s+l.valores[m],0)):0;
+  if(l&&tot0<0)setSg(-1);
+  const calc=()=>{const raw=parseBR(fValor.value),n=+b.querySelector('#nParc').value,m=b.querySelector('#nMes').value||UI.mes;
+    if(isNaN(raw)||raw===0){b.querySelector('#nPrev').textContent='Preencha o valor para ver as parcelas.';return null}
+    const v=Math.abs(raw);
+    const parc=sg*(vt==='total'?r2(v/n):r2(v));const total=sg*(vt==='total'?r2(v):r2(v*n));
+    const pre=sg<0?'Estorno: ':'';
+    b.querySelector('#nPrev').textContent=pre+(n>1?`${n}x de ${fmt(parc)} · ${ymLabel(m,'short')} a ${ymLabel(ymAdd(m,n-1),'short')} · total ${fmt(total)}`:`À vista ${fmt(parc)} na fatura de ${ymLabel(m)}`);
     return{parc,total,n,m}};
+  b.querySelectorAll('[data-sg]').forEach(x=>x.onclick=()=>{setSg(+x.dataset.sg);calc()});
   b.querySelectorAll('[data-vt]').forEach(x=>x.onclick=()=>{vt=x.dataset.vt;b.querySelectorAll('[data-vt]').forEach(y=>y.setAttribute('aria-pressed',y===x));calc()});
+  /* digitar "-" no valor também marca como estorno */
+  fValor.addEventListener('input',()=>{if(/^\s*-/.test(fValor.value)){fValor.value=fValor.value.replace(/^\s*-\s*/,'');setSg(-1)}});
   ['#nValor','#nParc','#nMes'].forEach(s=>b.querySelector(s).addEventListener('input',calc));
   b.querySelector('#fCompra').onsubmit=ev=>{ev.preventDefault();const r=calc(),d=b.querySelector('#nDesc').value.trim();
     if(!d){b.querySelector('#nErr').textContent='Informe a descrição.';return}if(!r){b.querySelector('#nErr').textContent='Valor inválido. Use por exemplo 129,90';return}
     if(!/^\d{4}-\d{2}$/.test(r.m)){b.querySelector('#nErr').textContent='Escolha o mês da primeira fatura.';return}
     const dt=b.querySelector('#nData').value;const dd=dt?dt.slice(8,10)+'/'+dt.slice(5,7):'';
-    const desc=d.toUpperCase()+(r.n>1?' - '+r.n+'X':(dd?' - '+dd:''));
-    const l={id:uid('l'),cartao:b.querySelector('#nCartao').value,desc,parcelas:r.n,data:dt||null,valores:{}};
-    let acc=0;for(let i=0;i<r.n;i++){const v=i===r.n-1&&vt==='total'?r2(r.total-acc):r.parc;l.valores[ymAdd(r.m,i)]=v;acc=r2(acc+v)}
-    S.lancamentos.push(l);syncLanc(l,1);S.meta.exemplo=S.meta.exemplo&&true;save();FIRST=firstYm();
-    UI.cartao=l.cartao;closeSheet();if(UI.tab!=='lanc'){UI.tab='lanc'}UI.mes=r.m;saveUI();render();toast('Compra lançada'+(contaDoCartao(l.cartao)?' e somada à fatura':''));
+    const cartaoSel=b.querySelector('#nCartao').value;
+    const vals={};
+    let acc=0;for(let i=0;i<r.n;i++){const v=i===r.n-1&&vt==='total'?r2(r.total-acc):r.parc;vals[ymAdd(r.m,i)]=v;acc=r2(acc+v)}
+    if(!l){
+      const desc=d.toUpperCase()+(r.n>1?' - '+r.n+'X':(dd?' - '+dd:''));
+      const nl={id:uid('l'),cartao:cartaoSel,desc,parcelas:r.n,data:dt||null,valores:vals};
+      S.lancamentos.push(nl);syncLanc(nl,1);S.meta.exemplo=S.meta.exemplo&&true;save();FIRST=firstYm();
+      UI.cartao=nl.cartao;closeSheet();if(UI.tab!=='lanc'){UI.tab='lanc'}UI.mes=r.m;saveUI();render();
+      toast((r.total<0?'Estorno lançado':'Compra lançada')+(contaDoCartao(nl.cartao)?' e somado à fatura':''));
+      return;
+    }
+    /* edição: mantém descrição e parcelas originais se nada relevante mudou */
+    const mesmoDesc=d.toUpperCase()===descBase(l.desc).toUpperCase()&&r.n===ms0.length&&dt===(l.data||'');
+    const mesmosVals=Math.abs(r.total-tot0)<0.005&&r.n===ms0.length&&r.m===ms0[0];
+    const desc=mesmoDesc?l.desc:d.toUpperCase()+(r.n>1?' - '+r.n+'X':(dd?' - '+dd:''));
+    const novoVals=mesmosVals?Object.assign({},l.valores):vals;
+    /* soma o novo antes de tirar o antigo, para a fatura nunca zerar no meio (perderia o "paga") */
+    const velho={cartao:l.cartao,valores:Object.assign({},l.valores)};
+    syncLanc({cartao:cartaoSel,valores:novoVals},1);syncLanc(velho,-1);
+    l.cartao=cartaoSel;l.desc=desc;l.data=dt||null;
+    if(!mesmosVals){l.valores=vals;l.parcelas=r.n}
+    save();FIRST=firstYm();
+    UI.cartao=l.cartao;closeSheet();saveUI();render();toast('Lançamento atualizado');
   };
-  b.querySelector('#nDesc').focus({preventScroll:true});
+  if(!l)b.querySelector('#nDesc').focus({preventScroll:true});else calc();
 }
 function formConta(){
   return `<form class="form" id="fNC">

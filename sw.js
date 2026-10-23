@@ -1,6 +1,6 @@
 // Service worker do Contas em Dia
 // Ao publicar uma versão nova do app, troque o número abaixo (v2, v3...).
-const CACHE = 'contas-em-dia-v1';
+const CACHE = 'contas-em-dia-v2';
 const ARQUIVOS = ['./', './index.html', './manifest.json', './icone-180.png', './icone-192.png', './icone-512.png'];
 
 self.addEventListener('install', e => {
