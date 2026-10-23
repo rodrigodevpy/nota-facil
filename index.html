@@ -470,7 +470,7 @@ function rowHTML(i){
   return `<div class="row${i.p?' paid':''}${late}" data-id="${i.c.id}">
     <button class="main" data-open="${i.c.id}" aria-label="Detalhes de ${esc(i.c.nome)}">${cal}
       <div class="txt"><div class="name">${esc(i.c.nome)}</div><div class="meta"><span class="pill ${cls}">${lab}</span>${meta?'<span>'+meta+'</span>':''}</div></div>
-      <div class="val">${fmt(i.v)}</div></button>
+      <div class="val${i.v<0?' neg':''}">${fmt(i.v)}</div></button>
     <button class="check${i.p?' on':''}" data-pay="${i.c.id}" aria-pressed="${i.p}" aria-label="${i.p?'Desmarcar':'Marcar'} ${esc(i.c.nome)} como paga"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
   </div>`;
 }
@@ -867,7 +867,7 @@ function mountCompra(b,l){
 function formConta(){
   return `<form class="form" id="fNC">
     <div class="field"><label for="ncNome">Nome da conta</label><input id="ncNome" placeholder="Ex.: Energia, Aluguel" required autocomplete="off"></div>
-    <div class="two"><div class="field"><label for="ncValor">Valor (R$)</label><input id="ncValor" inputmode="decimal" placeholder="0,00"></div>
+    <div class="two"><div class="field"><label for="ncValor">Valor (R$)</label><input id="ncValor" inputmode="text" placeholder="0,00 ou -0,00"></div>
     <div class="field"><label for="ncDia">Dia do vencimento</label><input id="ncDia" type="number" inputmode="numeric" min="1" max="31" placeholder="10"></div></div>
     <div class="two"><div class="field"><label for="ncGrupo">Origem do dinheiro</label><input id="ncGrupo" list="dlG2" placeholder="Salário"><datalist id="dlG2">${grupoOptions()}</datalist></div>
     <div class="field"><label for="ncTag">Etiqueta</label><input id="ncTag" placeholder="Opcional"></div></div>
@@ -879,7 +879,7 @@ function mountConta(b){
   b.querySelector('#fNC').onsubmit=ev=>{ev.preventDefault();const g=s=>b.querySelector(s).value.trim();
     const nome=g('#ncNome'),v=parseBR(g('#ncValor')),dia=parseInt(g('#ncDia'),10),ini=g('#ncIni')||UI.mes,rep=+g('#ncRep');
     if(!nome){b.querySelector('#ncErr').textContent='Informe o nome.';return}
-    if(isNaN(v)||v<=0){b.querySelector('#ncErr').textContent='Informe o valor. Ex.: 189,90';return}
+    if(isNaN(v)||v===0){b.querySelector('#ncErr').textContent='Informe o valor. Ex.: 189,90 (use - para valor negativo, como um estorno)';return}
     const c={id:uid('c'),nome,dia:dia>=1&&dia<=31?dia:null,grupo:g('#ncGrupo')||'Outros',tag:g('#ncTag'),cartao:null,valores:{}};
     for(let i=0;i<rep;i++)c.valores[ymAdd(ini,i)]={v:r2(v),p:false};
     S.contas.push(c);save();FIRST=firstYm();closeSheet();UI.tab='contas';UI.mes=ini;render();toast(rep>1?`Conta criada em ${rep} meses`:'Conta criada');
